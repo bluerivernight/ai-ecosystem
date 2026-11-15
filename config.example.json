@@ -1,0 +1,15 @@
+{
+  "port": 8080,
+  "ollamaUrl": "http://localhost:11434",
+  "model": "qwen2.5:1.5b-instruct-q4_K_M",
+  "bigModel": "qwen2.5:3b-instruct-q4_K_M",
+  "maxAgents": 5,
+  "stepCap": 12,
+  "numCtx": 2048,
+  "numPredict": 300,
+  "keepAlive": "5m",
+  "idleThinkMinutes": 25,
+  "chatChance": 0.015,
+  "shellWhitelist": ["node", "python", "git", "npm", "dir", "type", "echo"],
+  "updateUrl": "https://raw.githubusercontent.com/bluerivernight/ai-ecosystem/main/package.json"
+}

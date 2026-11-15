@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Council Report — 2D AI Agent Ecosystem Stack</title>
+<style>
+  :root{
+    --ink:#1c1f24; --paper:#fafaf8; --line:#e2e2de; --muted:#6b7078;
+    --agree:#2e7d5b; --clash:#b3541e; --spot:#6b4fb3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--paper);color:var(--ink);line-height:1.55;padding:2rem 1rem}
+  main{max-width:860px;margin:0 auto}
+  header{border-bottom:2px solid var(--ink);padding-bottom:1.2rem;margin-bottom:2rem}
+  h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:.9rem;margin-top:.3rem}
+  h2{font-size:1.05rem;margin:2.2rem 0 .8rem;padding-bottom:.35rem;border-bottom:1px solid var(--line)}
+  h2.agree{color:var(--agree)} h2.clash{color:var(--clash)} h2.spot{color:var(--spot)}
+  ul{margin:.5rem 0 .5rem 1.3rem}
+  li{margin:.35rem 0}
+  .panel{border:1px solid var(--line);border-radius:6px;padding:1rem 1.2rem;margin:.8rem 0;background:#fff}
+  .verdict{border-left:4px solid var(--ink);background:#fff;padding:1.2rem 1.4rem;border-radius:0 6px 6px 0}
+  .onething{border-left:4px solid var(--agree);background:#f2f8f5;padding:1.2rem 1.4rem;border-radius:0 6px 6px 0;margin-top:1.5rem}
+  details{border:1px solid var(--line);border-radius:6px;margin:.5rem 0;background:#fff}
+  summary{cursor:pointer;padding:.7rem 1rem;font-weight:600;font-size:.92rem}
+  summary:hover{background:#f4f4f2}
+  details .body{padding:.4rem 1.2rem 1rem;font-size:.9rem;color:#333}
+  .map{display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;margin:1rem 0}
+  .map .cell{border:1px solid var(--line);border-radius:6px;padding:.7rem .6rem;font-size:.78rem;background:#fff}
+  .cell b{display:block;font-size:.85rem;margin-bottom:.3rem}
+  .cell span{color:var(--muted)}
+  footer{margin-top:3rem;border-top:1px solid var(--line);padding-top:1rem;color:var(--muted);font-size:.8rem}
+  strong{font-weight:650}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Council Report — 2D AI Agent Ecosystem Stack</h1>
+  <div class="sub">Question: what stack + architecture for a walkable pixel-office agent world on a Surface Pro 6 (8 GB, UHD 620, 24/7, 100% free)? · 5 advisors · 5 peer reviewers · chaired synthesis · 2026-11-15</div>
+</header>
+
+<section class="panel">
+  <b>Advisor alignment map</b>
+  <div class="map">
+    <div class="cell"><b>The Expansionist</b><span>Event-driven cognition; skills format as plugin seed; keep Phaser. Strongest on vision, weakest on hardware math.</span></div>
+    <div class="cell"><b>The Outsider</b><span>8 GB is the whole project. One model slot, WebView2 not Chromium, watchdog outside the app.</span></div>
+    <div class="cell"><b>First Principles</b><span>Invert: headless job runner is the core; world is a view. Kill Phaser. Cognition is scheduled, not continuous.</span></div>
+    <div class="cell"><b>The Contrarian</b><span>Sub-2B models can't do tool calls reliably. Budget a 3B. Never vite dev 24/7. Honest docs over fake capability.</span></div>
+    <div class="cell"><b>The Executor</b><span>One Node process, better-sqlite3, native tool calling, step/token caps, start.bat setup. Ships Monday morning.</span></div>
+  </div>
+</section>
+
+<section class="verdict">
+  <b>Chairman's recommendation.</b>
+  One Node process. Headless-first job-runner core (task queue → SQLite WAL → sandboxed tool executor → event log); the Canvas 2D world is a client view over WebSocket. No Phaser, no Chromium, no Docker. Single model slot — start with <strong>qwen2.5:1.5b-instruct-q4_K_M</strong>, structured output (<code>format</code> JSON schema) ON, model swappable via config. Watchdog lives outside the app (Task Scheduler). Security floor day one: path whitelist, shell whitelist, kill switch, step/token budgets, event-log rotation. Setup is part of the product.
+</section>
+
+<section>
+  <h2 class="agree">Where the Council Agrees</h2>
+  <ul>
+    <li><strong>One model slot, one inference at a time</strong> — 4 advisors converged independently; turn-taking is mandatory and more believable.</li>
+    <li><strong>Drop Phaser → pure Canvas 2D</strong> — smaller, no WebGL pressure on shared iGPU, no dependency tax.</li>
+    <li><strong>Event-driven cognition, never continuous loops</strong> — biggest lever on idle CPU and thermals.</li>
+    <li><strong>SQLite WAL via better-sqlite3</strong> — 24/7 write safety; JSON files corrupt.</li>
+    <li><strong>Headless job runner is the core; world is a view</strong> — 24/7, recovery, idle power fall out for free.</li>
+    <li><strong>Crash recovery outside the process</strong> — Task Scheduler / .bat watchdog.</li>
+    <li><strong>Single Node process</strong> — Express + ws + better-sqlite3 + Ollama HTTP API. No Docker, no microservices.</li>
+  </ul>
+</section>
+
+<section>
+  <h2 class="clash">Where the Council Clashes</h2>
+  <div class="panel">
+    <strong>Model class: 1.5B workhorse vs 3B minimum.</strong> B/E optimize for RAM fit; D for tool-call capability. Resolution: Ollama structured output forces schema-valid tool calls by construction — moves most of D's failure from "model problem" to "solved constraint." Make the model a config entry; measure on real hardware; swap to 3B if needed (budget has room for exactly one swap). Never two models resident.
+  </div>
+</section>
+
+<section>
+  <h2 class="spot">Blind Spots the Council Caught</h2>
+  <ul>
+    <li><strong>Constrained decoding</strong> (structured output with JSON schema) — nobody's advisor proposed it; likely settles the model-class fight.</li>
+    <li><strong>Windows power policy</strong> — sleep/hibernate kills 24/7 before software does; disabling sleep on AC is a required setup step.</li>
+    <li><strong>Thermal throttling</strong> — unanimous among reviewers; num_thread to 4 physical cores; fanless-class tablet under sustained load.</li>
+    <li><strong>First-run UX</strong> — SmartScreen, memory dialogs, model download progress will trip the target user; walk the first error in the docs.</li>
+    <li><strong>Security / kill switch</strong> — 24/7 autonomous shell access on a personal machine needs path + command whitelists and a kill switch.</li>
+    <li><strong>Context budget</strong> — memory injection must be ranked + truncated, never dumped.</li>
+    <li><strong>Event-log growth</strong> — rotation needed on a 256 GB drive.</li>
+    <li><strong>Web research fragility</strong> — cache results, degrade offline.</li>
+    <li><strong>Measurement discipline</strong> — every RAM/latency number was asserted, none measured.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Advisor Full Responses</h2>
+  <details><summary>The Expansionist (A)</summary><div class="body">Event-driven architecture over polling — batch and queue agent cognition; LLM fires only at decision points. Package the headless scheduler + tool protocol as an open-source core. The world is the UI: keep renderer and runtime strictly separated over WebSocket — a reusable "embodied agent viewer." Skills folder = marketplace seed; publish the manifest format. Crash recovery + 24/7 headless = a lightweight autonomous-agent harness module. Pick: Phaser 3 yes, bet on 0.5B-class models + SQLite WAL + "cognition is scheduled, not continuous."</div></details>
+  <details><summary>The Outsider (B)</summary><div class="body">8 GB is the whole project; Ollama with 3–5 agents is where it dies. Windows eats 2.5–3 GB first. Subtraction: one model at a time, all agents queue; 0.5B–1.5B only; don't run Ollama 24/7 (keep-alive=0 or sleep the process); kill the browser — WebView2 native window, not Chromium or Electron; SQLite not JSON; watchdog outside the app (Task Scheduler + restart script).</div></details>
+  <details><summary>The First Principles Thinker (C)</summary><div class="body">Wrong question. Real question: how much inference can 8 GB sustain, and how do we architect so the AI almost never runs? One small model. Agents are event-driven state machines that occasionally ask the model a question. Invert: headless job runner (queue → SQLite WAL → sandboxed tool executor → event log) is the core; the world is a client view. Kill Phaser (~1,500 lines Canvas). Production-ready = single Node process, .bat watchdog, OLLAMA_NUM_PARALLEL=1, capped context. The queue and tool protocol are the product; the office is marketing.</div></details>
+  <details><summary>The Contrarian (D)</summary><div class="body">Fatal flaw: 0.5B–2B models can't reliably emit tool calls (malformed JSON, hallucinated paths). Budget one 3B-class model (qwen2.5-3b Q4 ≈ 1.9 GB), one agent thinking at a time. Memory math doesn't close with a browser renderer; headless 24/7 shouldn't run the game loop. Cold-load is 10–30 s. Never `vite dev` 24/7 — static build + lightweight server. Concrete fix: Canvas 2D, schema-validated whitelisted tool protocol, one model/one slot/queue. If 3B doesn't fit, be honest in docs that 1.5B writes summaries, not production code.</div></details>
+  <details><summary>The Executor (E)</summary><div class="body">Drop Phaser (60-line A*, vanilla TS). ONE Node process: Express + ws + better-sqlite3 (sync API). Model: qwen2.5:1.5b-instruct-q4_K_M default, one slot enforced. Tool protocol = Ollama native tool calling: read_file, write_file, run_shell (whitelisted), web_fetch (DuckDuckGo). While-loop with step cap + token cap. Day-one failure modes: agent loops, Ollama crash, idle CPU burn (30fps visible / halt headless; agents on timers, not game loop). Setup = winget + ollama pull + start.bat.</div></details>
+</section>
+
+<section>
+  <h2>Peer Review Highlights</h2>
+  <ul>
+    <li><strong>R1:</strong> Strongest D (attacked load-bearing premise); flagged structured output as the dispute-solver; all numbers asserted, none measured.</li>
+    <li><strong>R2:</strong> Strongest E (only Monday-morning artifact); D self-contradicts on persistence; flagged thermals, first-run UX, state migration.</li>
+    <li><strong>R3:</strong> Strongest B (binding constraint + decisive calls); merge B with C; flagged power reality, security, log growth, measurement-first spike.</li>
+    <li><strong>R4:</strong> Strongest C (inversion solves 24/7 as side effect); D undated overconfidence; flagged setup failure UX, context budget, Windows sleep policy.</li>
+    <li><strong>R5:</strong> Strongest E (buildable plan); A never engages hardware math; flagged thermals, run_shell sandbox, web research fragility.</li>
+  </ul>
+</section>
+
+<section class="onething">
+  <b>The one thing to do first:</b> a two-hour spike on the actual Surface Pro 6, headless — Ollama + qwen2.5:1.5b-instruct-q4_K_M, 20-call loop under a JSON tool-call schema via <code>format</code>, execute each call, record success rate / latency / peak memory with keep-alive off. ≥80% valid-executable tool calls → architecture settled at 1.5B; below → one-line config swap to 3B knowing the budget survives it.
+</section>
+
+<footer>Council of 5 (Expansionist · Outsider · First Principles · Contrarian · Executor) · peer-reviewed ×5 · chaired synthesis · Methodology adapted from Andrej Karpathy's LLM Council. Full transcript: council-transcript-2026-11-15.md</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "Meeting Notes",
+  "description": "Turns messy notes into a clean summary file",
+  "instructions": "When writing meeting notes: 1) start with a one-line summary, 2) list decisions as bullets, 3) list who-does-what next, 4) keep the whole file under 200 words. Save as notes/meeting-YYYY-MM-DD.md in the workspace.",
+  "keywords": ["meeting", "notes", "summary", "minutes"],
+  "tools": ["write_file"]
+}

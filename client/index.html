@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Ecosystem — Pixel Office</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #14161b;
+      color: #e5e7eb;
+      display: flex;
+    }
+    #game-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+    }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background: #1a1d24;
+      border-radius: 4px;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    #side {
+      width: 300px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      border-left: 1px solid #2a2e37;
+      background: #171a20;
+      font-size: 13px;
+    }
+    .panel { background: #1e222a; border-radius: 6px; padding: 10px 12px; }
+    .panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; margin-bottom: 6px; }
+    .counts { display: flex; gap: 8px; }
+    .counts div { flex: 1; text-align: center; background: #262b34; border-radius: 4px; padding: 6px 2px; }
+    .counts b { display: block; font-size: 18px; }
+    .counts span { font-size: 10px; color: #9ca3af; }
+    #event-log { max-height: 180px; overflow-y: auto; }
+    #event-log div { padding: 2px 0; border-bottom: 1px solid #262b34; color: #c7ccd6; font-size: 12px; }
+    #event-log time { color: #6b7280; font-size: 10px; margin-right: 6px; }
+    .task { padding: 5px 8px; background: #262b34; border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+    .task .st { font-weight: 600; }
+    .st.done { color: #4ade80; } .st.active { color: #fbbf24; } .st.failed { color: #f87171; } .st.queued { color: #93c5fd; }
+    #hint { color: #9ca3af; font-size: 12px; line-height: 1.5; }
+    #hint kbd { background: #2e3340; border-radius: 3px; padding: 1px 5px; font-size: 11px; }
+    /* dialog */
+    #dialog {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+      display: none; align-items: center; justify-content: center; z-index: 10;
+    }
+    #dialog.open { display: flex; }
+    #dialog .box {
+      background: #1e222a; border-radius: 8px; padding: 18px; width: 340px;
+      border: 1px solid #3a404c;
+    }
+    #dialog h2 { font-size: 16px; margin-bottom: 10px; }
+    #dialog label { display: block; font-size: 12px; color: #9ca3af; margin: 8px 0 3px; }
+    #dialog input, #dialog textarea, #dialog select {
+      width: 100%; background: #12151b; color: #e5e7eb; border: 1px solid #3a404c;
+      border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 13px;
+    }
+    #dialog textarea { height: 80px; resize: vertical; }
+    #dialog .row { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+    button {
+      background: #3b82f6; color: white; border: 0; border-radius: 4px;
+      padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer;
+    }
+    button.ghost { background: #2e3340; }
+    button:hover { filter: brightness(1.1); }
+    .agent-pick { display: flex; gap: 6px; flex-wrap: wrap; }
+    #update-banner {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+      background: #b45309; color: #fff; border-radius: 6px; padding: 8px 14px;
+      font-size: 13px; display: none; align-items: center; gap: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4); z-index: 20;
+    }
+    #update-banner button { background: #fff; color: #92400e; font-weight: 600; padding: 4px 10px; }
+    .agent-pick button.sel { outline: 2px solid #fff; }
+    .agent-pick button { padding: 5px 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="game-wrap"><canvas id="game" width="800" height="520"></canvas></div>
+
+  <div id="side">
+    <div class="panel">
+      <h3>Tasks</h3>
+      <div class="counts">
+        <div><b id="c-queued">0</b><span>queued</span></div>
+        <div><b id="c-active">0</b><span>active</span></div>
+        <div><b id="c-done">0</b><span>done</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Event log</h3>
+      <div id="event-log"></div>
+    </div>
+    <div class="panel">
+      <h3>Recent tasks</h3>
+      <div id="task-list"></div>
+    </div>
+    <div class="panel" id="hint">
+      <h3>How to play</h3>
+      <kbd>W A S D</kbd> walk around<br>
+      Walk up to an agent and press <kbd>E</kbd> to give them a task<br>
+      Agents think, work and chat on their own — tiny local AI
+    </div>
+  </div>
+
+  <div id="dialog">
+    <div class="box">
+      <h2 id="dlg-title">Give a task</h2>
+      <div class="agent-pick" id="dlg-agents"></div>
+      <label>Title</label>
+      <input id="dlg-title-input" maxlength="80" placeholder="e.g. Write a startup ideas file" />
+      <label>Details</label>
+      <textarea id="dlg-body" placeholder="What exactly should the agent do?"></textarea>
+      <div class="row">
+        <button class="ghost" id="dlg-cancel">Cancel</button>
+        <button id="dlg-send">Send task</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="update-banner">
+    <span>⬆ New version <b id="ub-version"></b> available — close this and run <b>update.bat</b> in the project folder.</span>
+    <button id="ub-ok">Got it</button>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

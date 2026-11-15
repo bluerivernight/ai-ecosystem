@@ -1,0 +1,12 @@
+node_modules/
+dist-server/
+dist-client/
+data/
+workspace/
+config.json
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.zip
+.DS_Store

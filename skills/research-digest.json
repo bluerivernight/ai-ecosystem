@@ -1,0 +1,7 @@
+{
+  "name": "Research Digest",
+  "description": "Searches the web and writes a short digest of what it found",
+  "instructions": "For research tasks: 1) run 1-2 web_search calls with focused queries, 2) pick the 3 most useful results, 3) write a digest file with one bullet per finding (title + link + one sentence), 4) end with a 'so what' line. Save as research/<topic>.md in the workspace.",
+  "keywords": ["research", "search", "find", "digest", "web", "look up"],
+  "tools": ["web_search", "write_file"]
+}
