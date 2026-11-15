@@ -19,7 +19,9 @@ import { buildTools } from './tools.js'
 import { SkillRegistry } from './skills.js'
 import { WorldSim } from './world.js'
 import { Net } from './net.js'
-import type { WorldMessage, EventMessage } from '../shared/types.js'
+import { Boss } from './boss.js'
+import type { WorldMessage, EventMessage, BossMessage } from '../shared/types.js'
+import { BOSS_ID } from '../shared/types.js'
 
 // capture console output into data/logs/server.log BEFORE anything else logs
 logs.install()
@@ -40,12 +42,17 @@ const DEFAULT_AGENTS = [
   { name: 'Nova', color: '#7dd3fc', shirt: '#2563eb', hair: '#1f2937', traits: 'Optimistic, loves writing docs and notes. Speaks in short friendly lines.' },
   { name: 'Rex',  color: '#fca5a5', shirt: '#dc2626', hair: '#111827', traits: 'Blunt systems thinker. Loves shell commands and tidy folders.' },
   { name: 'Pixel',color: '#fcd34d', shirt: '#d97706', hair: '#7c2d12', traits: 'Curious researcher. Likes web search and summarizing findings.' },
-  { name: 'Byte', color: '#a5b4fc', shirt: '#7c3aed', hair: '#4c1d95', traits: 'Quiet coder. Writes small, careful files and test scripts.' }
+  { name: 'Byte', color: '#a5b4fc', shirt: '#7c3aed', hair: '#4c1d95', traits: 'Quiet coder. Writes small, careful files and test scripts.' },
+  { name: 'Boss', color: '#fbbf24', shirt: '#f59e0b', hair: '#1f2937', traits: 'The boss. Confident, organized, keeps the office moving. Everyone works for him.' }
 ]
 const existing = db.getAgents()
 if (existing.length === 0) {
   DEFAULT_AGENTS.forEach((a, i) => db.upsertAgent({ id: i + 1, ...a }))
-  console.log('[boot] seeded 4 default agents')
+  console.log('[boot] seeded 4 default agents + Boss')
+} else if (!existing.some(a => a.id === BOSS_ID)) {
+  // migration: worlds created before the Boss exists get him added
+  db.upsertAgent({ id: BOSS_ID, ...DEFAULT_AGENTS[4]! })
+  console.log('[boot] added Boss to the existing office')
 }
 
 // ---- llm + tools + sim ----
@@ -96,6 +103,24 @@ app.post('/api/tasks', express.json({ limit: '10kb' }), (req, res) => {
 
 app.get('/api/events', (_req, res) => {
   res.json(db.recentEvents(50))
+})
+
+app.get('/api/chats', (_req, res) => {
+  res.json(db.recentChats(50))
+})
+
+// talk to the Boss — the single human entry point. Replies arrive over WS as
+// { type: 'boss' } (and show as a speech bubble in the office).
+app.post('/api/boss', express.json({ limit: '10kb' }), (req, res) => {
+  const { text } = (req.body ?? {}) as { text?: string }
+  const t = String(text ?? '').trim()
+  if (!t) {
+    res.status(400).json({ error: 'text is required' })
+    return
+  }
+  db.addChat('user', t.slice(0, 500))
+  res.json({ ok: true })
+  void boss.handle(t.slice(0, 500))
 })
 
 app.get('/health', async (_req, res) => {
@@ -150,6 +175,22 @@ sim = new WorldSim(db, cfg, llm, skills, tools, text => {
   const ev: EventMessage = { type: 'event', text, ts: Date.now() }
   net.broadcastEvent(ev)
 })
+
+const boss = new Boss(
+  { db, llm, cfg, tools },
+  {
+    onEvent: text => {
+      db.addEvent(text)
+      net.broadcastEvent({ type: 'event', text, ts: Date.now() })
+    },
+    onReply: reply => {
+      db.addChat('boss', reply)
+      sim.bossSay(reply)
+      net.broadcastBoss({ type: 'boss', text: reply, ts: Date.now() })
+    },
+    assign: (taskId, agentId) => sim.assign(taskId, agentId)
+  }
+)
 
 // ---- auto-update check ----
 updater.start()

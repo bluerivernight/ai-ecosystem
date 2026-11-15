@@ -1,7 +1,7 @@
 {
   "name": "ai-ecosystem",
-  "version": "1.0.0",
-  "description": "Walkable 2D pixel-office AI agent world. 100% local, runs on 8 GB RAM, 24/7 capable.",
+  "version": "1.1.0",
+  "description": "Sims-style god-eye 2D pixel-office AI agent world. Talk to the Boss, he runs the office. 100% local, runs on 8 GB RAM, 24/7 capable.",
   "type": "module",
   "engines": {
     "node": ">=20"

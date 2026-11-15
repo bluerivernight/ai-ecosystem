@@ -26,6 +26,16 @@ export interface EventMessage {
   ts: number
 }
 
+/** The Boss agent's reply to the human, pushed over WS after processing. */
+export interface BossMessage {
+  type: 'boss'
+  text: string
+  ts: number
+}
+
+/** Agent id reserved for the Boss — never receives tasks, never does idle thinking. */
+export const BOSS_ID = 5
+
 export interface ClientMessage {
   type: 'hello'
 }
@@ -46,4 +56,11 @@ export interface SkillManifest {
   instructions: string
   keywords?: string[]
   tools?: string[]
+}
+
+export interface ChatRow {
+  id: number
+  role: 'user' | 'boss'
+  text: string
+  ts: number
 }

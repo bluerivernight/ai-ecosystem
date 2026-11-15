@@ -1,9 +1,13 @@
 # 🏢 AI Ecosystem — a pixel office full of tiny AI workers
 
-A little 2D office you can walk around. Inside are AI agents that sit at desks,
-do **real work** (write files, search the web, run safe commands), remember what
-they did, and chat with each other. Everything runs **100% on your computer** —
-no cloud, no subscriptions, no API keys.
+A little 2D office you watch from above, Sims-style — the whole office is always
+on screen. Inside are AI agents that sit at desks, do **real work** (write files,
+search the web, run safe commands), remember what they did, and chat with each
+other. Everything runs **100% on your computer** — no cloud, no subscriptions,
+no API keys.
+
+**You talk to the 👑 Boss.** He knows everything about the office and delegates
+work to the workers — you never have to approach each agent one by one.
 
 Built to run 24/7 on a weak laptop (like a Surface Pro 6 with 8 GB RAM).
 
@@ -66,10 +70,11 @@ at 2 AM. **Windows puts laptops to sleep.** That kills everything.
 
 Double-click **`start.bat`**. A browser tab opens with the office.
 
-**"It works" looks like:** 4 little people in the office (Nova, Rex, Pixel, Byte),
-event-log lines appearing on their own, and when you walk up and press **E** and
-give a task, it finishes in under a minute (the first one can take ~20 s extra —
-the AI brain is loading). That's it.
+**"It works" looks like:** 5 little people in the office (Nova, Rex, Pixel, Byte
+and the gold 👑 Boss), event-log lines appearing on their own, and when you type
+a message to the Boss in the side panel, he replies in seconds and (if you asked
+for something to be done) agents walk to their desks and do it in under a minute
+(the first one can take ~20 s extra — the AI brain is loading). That's it.
 
 ---
 
@@ -94,14 +99,16 @@ Send that single file and it's fixable.
 
 ## How to play
 
-- **W A S D** — walk around
-- Walk up to an agent (they have name tags) and press **E** — a task dialog opens
-- Type what you want done, e.g.:
-  - *"Write a file with 5 startup ideas for a lemonade stand"*
-  - *"Research the best cheap keyboards and save a digest"*
-  - *"List what's currently in the workspace"*
-- The agent walks to its desk, thinks, uses real tools (reads/writes real files,
-  searches the real web), and finishes. Watch the bubbles and the event log.
+- **No walking — it's a god-eye view.** The whole office is always visible, like The Sims.
+- **Message the Boss** in the side panel — he's the only one you talk to. Examples:
+  - *"What's everyone working on?"* — he answers from what he knows
+  - *"Please write a file with 5 startup ideas for a lemonade stand"* — he delegates to workers
+  - *"Research the best cheap keyboards and save a digest"* — delegation again
+- The Boss shows his reply as a speech bubble in the office, and workers walk to
+  their desks, think, and use real tools (read/write real files, search the real
+  web). Watch the bubbles and the event log.
+- Power-user bonus: **click an agent on the map** to open a direct task dialog for
+  that one agent (the Boss can't be given tasks — he gives them).
 - Agents also chat with each other and have passing thoughts on their own.
   (They don't spam the AI — it only "thinks" at decision points, so idle CPU
   stays near zero.)
@@ -137,9 +144,10 @@ background at near-zero CPU.
 
 ## Adding your own agents
 
-Edit `config.json`? No — agents live in the database, but the 4 default ones
-are seeded on first run. To add more, edit the `DEFAULT_AGENTS` list in
-`server/main.ts` before the first run, or ask your agents to do it for you later.
+Edit `config.json`? No — agents live in the database, but the 4 workers + the
+Boss are seeded on first run (and an older database gets the Boss added
+automatically). To add more, edit the `DEFAULT_AGENTS` list in `server/main.ts`
+before the first run, or ask your agents to do it for you later.
 
 ## Adding your own skills
 
@@ -183,7 +191,8 @@ simulation (movement, desks, pathfinding), executes agent tools in a sandbox,
 and stores everything in a local SQLite database. The pixel world is just a
 *view* — the agents actually live in a headless task runner, so the world can
 run 24/7 with or without anyone watching. The AI model runs in a separate
-process (Ollama) and agents queue for it one at a time.
+process (Ollama) and agents queue for it one at a time — the Boss and the
+workers share the same one model slot.
 
 Full tech-decision record: [`council-report-2026-11-15.html`](council-report-2026-11-15.html)
 (an "LLM council" of 5 AI advisors debated and peer-reviewed this architecture).

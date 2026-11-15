@@ -10,6 +10,7 @@ import type { ToolDef } from './tools.js'
 import type { AppConfig } from './config.js'
 import type { AgentSnapshot } from '../shared/types.js'
 import { deskTiles, seatsForTile } from '../shared/map.js'
+import { BOSS_ID } from '../shared/types.js'
 import { runTask, oneLiner } from './agent.js'
 
 type Status = 'idle' | 'walking' | 'working' | 'thinking' | 'chatting'
@@ -99,8 +100,9 @@ export class WorldSim {
     a.bubbleUntil = Date.now() + ms
   }
 
-  /** Queue a task: agent walks to its desk, then works. */
+  /** Queue a task: agent walks to its desk, then works. The Boss never runs tasks. */
   assign(taskId: number, agentId: number): void {
+    if (agentId === BOSS_ID) return
     const a = this.agents.get(agentId)
     if (!a) return
     const path = findPath(
@@ -113,6 +115,11 @@ export class WorldSim {
     a.taskId = taskId
     a.status = 'idle'
     this.bubble(agentId, 'got it!', 2500)
+  }
+
+  /** The Boss speaks in a speech bubble (god-view office). */
+  bossSay(text: string): void {
+    this.bubble(BOSS_ID, text, 15_000)
   }
 
   /** Send an agent to stand near another agent (visual, cheap). */
@@ -210,7 +217,7 @@ export class WorldSim {
   private maybeChat(now: number): void {
     if (now - this.lastChat < 10 * 60_000) return
     if (Math.random() > this.cfg.chatChance * 4) return
-    const idle = this.list().filter(a => a.status === 'idle')
+    const idle = this.list().filter(a => a.status === 'idle' && a.row.id !== BOSS_ID)
     for (let i = 0; i < idle.length; i++) {
       for (let j = i + 1; j < idle.length; j++) {
         const A = idle[i]!
@@ -263,7 +270,7 @@ export class WorldSim {
   /** Every N minutes one idle agent has a passing thought. */
   private maybeThink(now: number): void {
     if (now - this.lastThink < this.cfg.idleThinkMinutes * 60_000) return
-    const idle = this.list().filter(a => a.status === 'idle')
+    const idle = this.list().filter(a => a.status === 'idle' && a.row.id !== BOSS_ID)
     if (idle.length === 0) return
     this.lastThink = now
     const a = idle[Math.floor(Math.random() * idle.length)]!

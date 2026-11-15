@@ -1,9 +1,9 @@
-// Main client loop: 30 fps cap, pause when hidden, WASD walk, E to assign.
+// Main client loop: GOD-EYE VIEW (Sims style). The whole office is visible,
+// no walking avatar. Click an agent to give them a task directly, or message
+// the Boss in the side panel — he knows everything and delegates.
 
-import { TILE, MAP_W, MAP_H } from '../shared/map.js'
-import { ClientNet } from './net.js'
-import { Renderer, type UserInfo } from './render.js'
-import { tryMove } from './move.js'
+import { ClientNet } from './net.ts'
+import { Renderer } from './render.ts'
 
 const FPS_MS = 1000 / 30
 
@@ -12,21 +12,23 @@ const net = new ClientNet()
 const events = document.getElementById('event-log')!
 const taskList = document.getElementById('task-list')!
 
-// ---- user state (client-authoritative) ----
-const user: UserInfo = { x: 20.5, y: 12.5, walkPhase: 0 }
-const keys = new Set<string>()
+let selectedId: number | null = null
 
-window.addEventListener('keydown', e => {
-  if (dialogOpen()) {
-    if (e.key === 'Escape') closeDialog()
-    return
+const renderer = new Renderer(canvas)
+
+// ---- click: select an agent (for a direct task, optional — the Boss is the main way) ----
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect()
+  const mx = ((e.clientX - rect.left) * canvas.width) / rect.width
+  const my = ((e.clientY - rect.top) * canvas.height) / rect.height
+  let hit: number | null = null
+  for (const a of net.agents) {
+    const ax = (a.x * 32) * renderer.scale
+    const ay = (a.y * 32) * renderer.scale
+    if (Math.hypot(ax - mx, ay - my) < 22) hit = a.id
   }
-  keys.add(e.key.toLowerCase())
-  if (e.key.toLowerCase() === 'e') tryAssign()
+  selectedId = hit
 })
-window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()))
-
-const renderer = new Renderer(canvas, () => user)
 
 // ---- side panels ----
 net.onEvent = (text, ts) => {
@@ -62,7 +64,64 @@ function escapeHtml(s: string): string {
   return s.replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] ?? c)
 }
 
-// ---- assign dialog ----
+// ---- Boss chat (the main way to interact) ----
+const chatLog = document.getElementById('chat-log')!
+const chatInput = document.getElementById('chat-input') as HTMLInputElement
+
+function addChatLine(role: 'user' | 'boss', text: string): void {
+  const div = document.createElement('div')
+  div.className = `msg ${role}`
+  div.textContent = text
+  chatLog.appendChild(div)
+  chatLog.scrollTop = chatLog.scrollHeight
+}
+
+net.onBoss = (text) => {
+  addChatLine('boss', text)
+  setPending('')
+}
+
+// load past conversation (so a refresh keeps the chat)
+void fetch('/api/chats')
+  .then(r => r.json())
+  .then((chats: Array<{ role: 'user' | 'boss'; text: string }>) => {
+    for (const c of chats.reverse()) addChatLine(c.role, c.text)
+  })
+  .catch(() => {})
+
+const pendingEl = document.getElementById('chat-pending')!
+
+function setPending(text: string): void {
+  pendingEl.textContent = text
+}
+
+let sending = false
+async function sendToBoss(): Promise<void> {
+  const text = chatInput.value.trim()
+  if (!text || sending) return
+  chatInput.value = ''
+  addChatLine('user', text)
+  sending = true
+  setPending('Boss is thinking…')
+  try {
+    await fetch('/api/boss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    })
+  } catch {
+    setPending('Server unreachable.')
+  } finally {
+    sending = false
+  }
+}
+
+document.getElementById('chat-send')!.onclick = sendToBoss
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') void sendToBoss()
+})
+
+// ---- assign dialog (optional direct task — power-user shortcut) ----
 const dialog = document.getElementById('dialog')!
 const dlgAgents = document.getElementById('dlg-agents')!
 let pickedAgent: number | null = null
@@ -75,6 +134,7 @@ function openDialog(): void {
   pickedAgent = null
   dlgAgents.innerHTML = ''
   for (const a of net.agents) {
+    if (a.id === 5) continue // the Boss delegates — he doesn't take tasks
     const b = document.createElement('button')
     b.textContent = a.name
     b.style.background = a.shirt
@@ -93,6 +153,7 @@ function openDialog(): void {
 
 function closeDialog(): void {
   dialog.classList.remove('open')
+  selectedId = null
 }
 
 document.getElementById('dlg-cancel')!.onclick = closeDialog
@@ -114,69 +175,17 @@ async function sendTask(): Promise<void> {
   }
 }
 
-function nearestAgent(): { id: number; dist: number } | null {
-  let best: { id: number; dist: number } | null = null
-  for (const a of net.agents) {
-    const d = Math.hypot(a.x - user.x, a.y - user.y)
-    if (d < 2.2 && (!best || d < best.dist)) best = { id: a.id, dist: d }
-  }
-  return best
-}
-
-function tryAssign(): void {
-  if (!dialogOpen() && nearestAgent()) openDialog()
-}
-
 // ---- loop ----
 net.connect()
 
 let lastDraw = 0
-let camX = 0
-let camY = 0
 
-function centerCamera(): void {
-  const worldW = MAP_W * TILE
-  const worldH = MAP_H * TILE
-  camX = Math.max(0, Math.min(worldW - canvas.width, user.x * TILE - canvas.width / 2))
-  camY = Math.max(0, Math.min(worldH - canvas.height, user.y * TILE - canvas.height / 2))
-  if (worldW < canvas.width) camX = -(canvas.width - worldW) / 2
-  if (worldH < canvas.height) camY = -(canvas.height - worldH) / 2
-}
-
-function tickUser(dt: number): void {
-  let dx = 0
-  let dy = 0
-  if (keys.has('w') || keys.has('arrowup')) dy -= 1
-  if (keys.has('s') || keys.has('arrowdown')) dy += 1
-  if (keys.has('a') || keys.has('arrowleft')) dx -= 1
-  if (keys.has('d') || keys.has('arrowright')) dx += 1
-  if (dx === 0 && dy === 0) return
-  const speed = 4.5 * dt
-  let moved = false
-  if (dx !== 0) {
-    const [nx, ny] = tryMove(user.x, user.y, Math.sign(dx) * Math.min(1, Math.abs(dx) * speed + 0.51), 0)
-    if (nx !== user.x) { user.x += Math.sign(nx - user.x) * Math.min(speed, Math.abs(nx - user.x)); moved = true }
-  }
-  if (dy !== 0) {
-    const [nx, ny] = tryMove(user.x, user.y, 0, Math.sign(dy) * Math.min(1, Math.abs(dy) * speed + 0.51))
-    if (ny !== user.y) { user.y += Math.sign(ny - user.y) * Math.min(speed, Math.abs(ny - user.y)); moved = true }
-  }
-  if (moved) user.walkPhase += dt * 8
-}
-
-let prev = performance.now()
 function loop(now: number): void {
   requestAnimationFrame(loop)
   if (document.hidden) return // zero GPU/CPU when tab is hidden
   if (now - lastDraw < FPS_MS) return
   lastDraw = now
-
-  const dt = Math.min(0.1, (now - prev) / 1000)
-  prev = now
-  tickUser(dt)
-  centerCamera()
-  const near = nearestAgent()
-  renderer.draw(net.agents, near?.id ?? null, net.connected ? Date.now() : 0, camX, camY)
+  renderer.draw(net.agents, selectedId, net.connected ? Date.now() : 0)
 }
 requestAnimationFrame(loop)
 
@@ -184,18 +193,3 @@ net.onStateChange = () => {
   const badge = document.title
   document.title = net.connected ? badge.replace(' ⚠', '') : badge + ' ⚠'
 }
-
-// ---- update banner ----
-const updateBanner = document.getElementById('update-banner')!
-async function checkUpdate(): Promise<void> {
-  try {
-    const u = await (await fetch('/api/update')).json() as { updateAvailable: boolean; latest: string | null }
-    if (u.updateAvailable && u.latest) {
-      document.getElementById('ub-version')!.textContent = u.latest
-      updateBanner.style.display = 'flex'
-    }
-  } catch { /* server unreachable — ignore */ }
-}
-void checkUpdate()
-setInterval(checkUpdate, 60_000)
-document.getElementById('ub-ok')!.onclick = () => { updateBanner.style.display = 'none' }

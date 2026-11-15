@@ -1,12 +1,13 @@
 // Client network: connect to /ws, keep latest world + events.
 
-import type { AgentSnapshot, WorldMessage, EventMessage } from '../shared/types.js'
+import type { AgentSnapshot, WorldMessage, EventMessage, BossMessage } from '../shared/types.js'
 
 export class ClientNet {
   agents: AgentSnapshot[] = []
   taskCounts = { queued: 0, active: 0, done: 0 }
   connected = false
   onEvent: (text: string, ts: number) => void = () => {}
+  onBoss: (text: string, ts: number) => void = () => {}
   onStateChange: () => void = () => {}
 
   private ws: WebSocket | null = null
@@ -29,12 +30,14 @@ export class ClientNet {
     }
     ws.onmessage = raw => {
       try {
-        const msg = JSON.parse(String(raw.data)) as WorldMessage | EventMessage
+        const msg = JSON.parse(String(raw.data)) as WorldMessage | EventMessage | BossMessage
         if (msg.type === 'world') {
           this.agents = msg.agents
           this.taskCounts = msg.taskCounts
         } else if (msg.type === 'event') {
           this.onEvent(msg.text, msg.ts)
+        } else if (msg.type === 'boss') {
+          this.onBoss(msg.text, msg.ts)
         }
       } catch {
         // ignore malformed frames

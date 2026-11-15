@@ -15,9 +15,9 @@ You are an AI coding agent (Claude Code, Codex, Cursor, Gemini CLI or similar) a
 
 ## 1. What this is
 
-A walkable 2D pixel office (pure Canvas 2D — no Phaser, no WebGL, no Chromium/Electron/Docker) where four AI agents sit at desks, receive tasks from the person, and execute them with real tools: reading and writing real files in `data/workspace/`, real web search, safe shell commands. Agents move, chat and have idle thoughts on their own, but the LLM only runs **at decision points** (event-driven cognition) — idle CPU is near zero, which is what makes 24/7 operation possible on weak hardware.
+A god-eye 2D pixel office (pure Canvas 2D — no Phaser, no WebGL, no Chromium/Electron/Docker) where four AI workers sit at desks and execute tasks with real tools: reading and writing real files in `data/workspace/`, real web search, safe shell commands. Agents move, chat and have idle thoughts on their own, but the LLM only runs **at decision points** (event-driven cognition) — idle CPU is near zero, which is what makes 24/7 operation possible on weak hardware.
 
-- Humans play it: walk with WASD, press E near an agent, type a task.
+- Humans play it Sims-style: the whole office is always visible, nobody walks an avatar. They message the **Boss** (agent id 5) in the side panel — he answers questions, delegates real work to the workers, and is the only agent a human normally talks to. A click-on-agent direct task dialog remains as a power-user shortcut (the Boss never takes tasks).
 - The world is a *view*. The headless core (`WorldSim`) runs with or without a browser; `start-headless.bat` runs it with none open.
 
 ## 2. Architecture: processes, ports
@@ -38,17 +38,19 @@ HTTP routes the server answers:
 | `/` | the pixel office (static, from `dist-client/`) |
 | `GET /health` | `{ ok, model, ollama, modelLoaded, clients, headless }` — the one-glance check |
 | `GET /api/state` | agents snapshot, task counts, recent tasks, events, skills |
-| `GET /api/tasks` / `POST /api/tasks` | list recent tasks / assign one `{ agentId, title, body }` |
+| `GET /api/tasks` / `POST /api/tasks` | list recent tasks / assign one `{ agentId, title, body }` (Boss id 5 rejected by the sim) |
+| `POST /api/boss` | `{ text }` → `{ ok: true }` immediately; the Boss's reply arrives over WS as `{ type: 'boss', text, ts }` and as a speech bubble in the office |
+| `GET /api/chats` | the human ↔ Boss chat history (`chats` table, rotated to newest 500 rows) |
 | `GET /api/events` | recent event log |
 | `GET /api/diagnostics` | version, uptime, node version, platform, RSS memory, config, health, crash-file list, last 80 log lines — everything a bug report needs |
 | `GET /api/update` | current vs. latest version from the auto-updater |
-| `WS /ws` | live world stream (agents + task counts + events) |
+| `WS /ws` | live world stream (agents + task counts + events + boss replies) |
 
 Data layout (all under `data/`, all git-ignored):
 
 | path | what |
 |---|---|
-| `data/eco.db` (+ `-shm`, `-wal`) | SQLite in WAL mode. Tables: `agents`, `tasks`, `memories`, `events`. `events` is auto-rotated to the newest 2000 rows so the DB cannot grow forever |
+| `data/eco.db` (+ `-shm`, `-wal`) | SQLite in WAL mode. Tables: `agents`, `tasks`, `memories`, `events`, `chats`. `events` rotates to the newest 2000 rows, `chats` to the newest 500, so the DB cannot grow forever |
 | `data/workspace/` | the ONLY folder agent tools can touch |
 | `data/logs/server.log` | every console line, timestamped, rotated at ~1 MB (`server.log.1`) |
 | `data/logs/crash-*.json` | one JSON per crash: kind, message, stack, version, uptime, last 50 log lines |
@@ -62,14 +64,15 @@ Data layout (all under `data/`, all git-ignored):
 | `server/config.ts` | loads `config.json` (writes defaults if missing). **GOTCHA: `ROOT` is computed as two `dirname` levels up from the compiled file** — compiled output lives at `dist-server/server/config.js`, so root is `import.meta.dirname/../../`. Getting this wrong silently makes `data/` appear inside `dist-server/` |
 | `server/llm.ts` | the ONE model slot: serialized chat queue, `format` = JSON schema, 120 s timeout, exact-match `hasModel` |
 | `server/agent.ts` | the task runner: builds the prompt, parses the forced-JSON tool call, runs tools in a loop, writes the result to the task row |
+| `server/boss.ts` | the Boss (agent id 5): builds an office-aware prompt (workers, tasks, events, chats, workspace listing), forces `{ reply, tasks[] }` JSON, delegates via `db.addTask` + `sim.assign` |
 | `server/tools.ts` | sandboxed tools (§0 rule 2). `FORBIDDEN_CHARS` regex + first-word whitelist for `run_shell` |
-| `server/world.ts` | `WorldSim`: movement, desks, pathfinding, task assignment, idle thoughts, agent chat |
+| `server/world.ts` | `WorldSim`: movement, desks, pathfinding, task assignment, idle thoughts, agent chat. Guards: the Boss never receives tasks and never idles/chats |
 | `server/db.ts` | better-sqlite3, WAL, migrations inline |
 | `server/skills.ts` | loads every `skills/*.json`, matches skills to task text by word overlap (top 2), injects their `instructions` (cut to 600 chars) into the prompt |
 | `server/logs.ts` | console capture → ring buffer + `data/logs/server.log`; `writeCrash()` → `data/logs/crash-*.json` |
 | `server/updater.ts` | version check (§7). Never downloads anything — it only reports |
-| `server/net.ts` | WS hub: world broadcast + event broadcast, client count |
-| `client/` | the pixel world: `main.ts` (loop, WASD, E-to-assign, update banner), `render.ts` (Canvas 2D), `net.ts`, `move.ts` |
+| `server/net.ts` | WS hub: world broadcast + event broadcast + boss-reply broadcast, client count |
+| `client/` | the pixel world: `main.ts` (god-eye loop, click-to-select, Boss chat panel, update banner), `render.ts` (Canvas 2D, whole map fitted at one fixed scale, name tags/bubbles in screen space), `net.ts`, `move.ts` (legacy walking module, unused by main) |
 | `shared/types.ts`, `shared/map.ts`, `shared/sprites.ts` | types, tile map, pixel sprites shared by both sides |
 | `skills/` | skill manifests, JSON only (§9). `skills/README.md` documents the format |
 | `scripts/make-report.mjs` | collects crash logs + log tail + live diagnostics into `data/report/` |
@@ -137,22 +140,22 @@ Expected console (start):
 [boot] model ready: qwen2.5:1.5b-instruct-q4_K_M
 ```
 
-(On first run before the model check completes you may instead see `[boot] model missing — run: ollama pull …`, or `[boot] Ollama not reachable` — see §6.)
+(An existing database from before v1.1.0 instead prints `[boot] added Boss to the existing office` — that migration is correct and automatic. On first run before the model check completes you may instead see `[boot] model missing — run: ollama pull …`, or `[boot] Ollama not reachable` — see §6.)
 
-Expected: browser shows a pixel office with 4 agents (Nova, Rex, Pixel, Byte), the side panel counts, and the event log ticking. Verify end to end:
+Expected: browser shows a pixel office with 5 agents (Nova, Rex, Pixel, Byte and the gold 👑 Boss, drawn bigger), the Boss chat panel on the left, task counts and a ticking event log. Verify end to end:
 
 ```
 curl http://localhost:8080/health
 → {"ok":true,"model":"qwen2.5:1.5b-instruct-q4_K_M","ollama":true,"modelLoaded":true,...}
 ```
 
-Then give a real task (walk to an agent, press E — or by API):
+Then talk to the Boss (the normal human path):
 
 ```
-curl -X POST http://localhost:8080/api/tasks -H "Content-Type: application/json" -d "{\"agentId\":1,\"title\":\"Say hello\",\"body\":\"Create a file called hello.md with a short greeting\"}"
+curl -X POST http://localhost:8080/api/boss -H "Content-Type: application/json" -d "{\"text\":\"Please have someone write hello.txt containing the word hi\"}"
 ```
 
-Expected within ~20–60 s (first task loads the model into memory): the task turns **done** in the panel, and `data/workspace/hello.md` exists on disk. If the file exists, the whole stack works: browser → API → queue → LLM → tools → filesystem.
+Expected within ~20–60 s: `GET /api/chats` contains the user line and the Boss reply, the event log shows `Boss delegated to <worker>: …`, `GET /api/tasks` shows the delegated task(s) reaching **done**, and `data/workspace/hello.txt` exists on disk. (The direct path still works too: `POST /api/tasks` with `{ agentId: 1, ... }`.) If the file exists, the whole stack works: browser → API → Boss → queue → LLM → tools → filesystem.
 
 ## 6. How to read every failure
 
@@ -231,7 +234,7 @@ Run all of these after any change; all must pass before you claim done:
    - `curl http://localhost:8080/health` → `"ollama":true,"modelLoaded":true`
    - `curl http://localhost:8080/api/diagnostics` → has `version`, `recentLog` non-empty
    - `curl http://localhost:8080/api/update` → `current` matches `package.json`
-3. POST a task (§5.5) → status reaches `done`, result file exists in `data/workspace/`.
-4. Open `http://localhost:8080` in a browser → agents visible, event log ticks, no console errors.
+3. POST `/api/boss` (§5.5) → Boss reply lands in `/api/chats`, a delegation event appears, the delegated task reaches `done`, the result file exists in `data/workspace/`.
+4. Open `http://localhost:8080` in a browser → whole office visible (5 agents, Boss gold and bigger), Boss chat panel works, event log ticks, no console errors.
 5. `data/logs/server.log` contains your session's boot lines.
 6. `git status` shows no `data/`, `config.json`, `dist-*` or `node_modules` staged.

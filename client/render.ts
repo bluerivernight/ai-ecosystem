@@ -1,23 +1,12 @@
-// Canvas 2D renderer. Cached map layer drawn once; sprites + bubbles per frame.
-// 16×16 pixel sprites scaled 2× to TILE=32.
+// Canvas 2D renderer — GOD-EYE VIEW (Sims style). The whole office is always
+// visible, fitted to the canvas; the human is not an avatar in the world.
+// 16×16 pixel sprites drawn at the map scale; name tags + bubbles in screen
+// space so they stay readable.
 
-import { MAP, TILE, MAP_W, MAP_H, tileAt } from '../shared/map.js'
+import { TILE, MAP_W, MAP_H, tileAt } from '../shared/map.js'
 import { PERSON, type PersonColors } from '../shared/sprites.js'
 import type { AgentSnapshot } from '../shared/types.js'
-
-export interface UserInfo {
-  x: number
-  y: number
-  walkPhase: number
-}
-
-const PALETTE: PersonColors = {
-  shirt: '#6b7280',
-  hair: '#111827',
-  pants: '#33383f',
-  shoes: '#22252a',
-  skin: '#f0c9a0'
-}
+import { BOSS_ID } from '../shared/types.js'
 
 const DESK_COLORS: Record<string, string> = {
   '#': '#2c3140',
@@ -38,15 +27,14 @@ const DESK_TOP: Record<string, string> = {
 export class Renderer {
   private ctx: CanvasRenderingContext2D
   private mapLayer: HTMLCanvasElement
-  private scale = 2
+  /** how much of the world pixel equals one screen pixel (fit whole map) */
+  readonly scale: number
 
-  constructor(
-    private canvas: HTMLCanvasElement,
-    private getUser: () => UserInfo
-  ) {
+  constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('no 2d context')
     this.ctx = ctx
+    this.scale = Math.min(canvas.width / (MAP_W * TILE), canvas.height / (MAP_H * TILE))
     this.mapLayer = this.buildMapLayer()
   }
 
@@ -88,29 +76,30 @@ export class Renderer {
     return c
   }
 
-  draw(agents: AgentSnapshot[], nearAgentId: number | null, serverNow: number, camX: number, camY: number): void {
+  draw(agents: AgentSnapshot[], selectedId: number | null, serverNow: number): void {
     const ctx = this.ctx
+    const s = this.scale
     ctx.imageSmoothingEnabled = false
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
     ctx.save()
-    ctx.translate(-camX, -camY)
+    ctx.scale(s, s)
     ctx.drawImage(this.mapLayer, 0, 0)
 
-    // user (client-authoritative)
-    const u = this.getUser()
-    this.drawPerson(u.x, u.y, 'down', PALETTE, Math.floor(u.walkPhase) % 2, 1.15)
-    ctx.fillStyle = '#93c5fd'
-    this.nameTag(u.x, u.y, 'YOU')
-
-    // agents (server-authoritative snapshots)
+    // agents (server-authoritative snapshots); Boss drawn bigger
     for (const a of agents) {
       const frame = a.status === 'walking' ? 1 : 0
-      this.drawPerson(a.x, a.y, a.facing, agentPalette(a), frame, 1)
-      this.nameTag(a.x, a.y, a.name, a.color)
-      if (a.id === nearAgentId) this.highlight(a.x, a.y)
-      if (a.bubble && serverNow > 0) this.bubble(a.x, a.y, a.bubble)
+      this.drawPerson(a.x, a.y, a.facing, agentPalette(a), frame, a.id === BOSS_ID ? 1.2 : 1)
     }
     ctx.restore()
+
+    // screen-space overlays (tags, selection, bubbles) — stay readable at god zoom
+    for (const a of agents) {
+      const sx = a.x * TILE * s
+      const sy = a.y * TILE * s
+      this.nameTag(sx, sy, a.name, a.id === BOSS_ID ? '#fbbf24' : (a.color ?? '#e5e7eb'), a.id === BOSS_ID)
+      if (a.id === selectedId) this.highlight(sx, sy)
+      if (a.bubble && serverNow > 0) this.bubble(sx, sy, a.bubble)
+    }
 
     if (!navigator.onLine) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'
@@ -154,17 +143,18 @@ export class Renderer {
     }
   }
 
-  private nameTag(x: number, y: number, name: string, color?: string): void {
+  private nameTag(x: number, y: number, name: string, color: string, isBoss = false): void {
     const ctx = this.ctx
-    const px = x * TILE + TILE / 2
-    const py = y * TILE - 6
+    const label = isBoss ? `👑 ${name}` : name
+    const px = x + TILE * this.scale / 2
+    const py = y - 6
     ctx.font = 'bold 10px sans-serif'
     ctx.textAlign = 'center'
-    const w = ctx.measureText(name).width + 8
+    const w = ctx.measureText(label).width + 8
     ctx.fillStyle = 'rgba(0,0,0,0.55)'
     ctx.fillRect(px - w / 2, py - 10, w, 13)
-    ctx.fillStyle = color ?? '#e5e7eb'
-    ctx.fillText(name, px, py)
+    ctx.fillStyle = color
+    ctx.fillText(label, px, py)
     ctx.textAlign = 'left'
   }
 
@@ -172,13 +162,14 @@ export class Renderer {
     const ctx = this.ctx
     ctx.strokeStyle = '#fbbf24'
     ctx.lineWidth = 2
-    ctx.strokeRect(x * TILE - 2, y * TILE - 2, TILE + 4, TILE + 4)
+    const t = TILE * this.scale
+    ctx.strokeRect(x - 2, y - 2, t + 4, t + 4)
   }
 
   private bubble(x: number, y: number, text: string): void {
     const ctx = this.ctx
-    const px = x * TILE + TILE / 2
-    const py = y * TILE - 24
+    const px = x + TILE * this.scale / 2
+    const py = y - 24
     ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
     const w = ctx.measureText(text).width + 10
@@ -207,5 +198,3 @@ function agentPalette(a: AgentSnapshot): PersonColors {
     skin: '#e8b98a'
   }
 }
-
-void MAP

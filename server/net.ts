@@ -2,7 +2,7 @@
 // and event lines as they happen. The world sim never touches sockets directly.
 
 import type { WebSocketServer, WebSocket } from 'ws'
-import type { WorldMessage, EventMessage } from '../shared/types.js'
+import type { WorldMessage, EventMessage, BossMessage } from '../shared/types.js'
 
 export class Net {
   private clients = new Set<WebSocket>()
@@ -29,6 +29,10 @@ export class Net {
     this.send(msg)
   }
 
+  broadcastBoss(msg: BossMessage): void {
+    this.send(msg)
+  }
+
   clientCount(): number {
     return this.clients.size
   }
@@ -39,7 +43,7 @@ export class Net {
     this.wss?.close()
   }
 
-  private send(msg: WorldMessage | EventMessage): void {
+  private send(msg: WorldMessage | EventMessage | BossMessage): void {
     const data = JSON.stringify(msg)
     for (const c of this.clients) {
       if (c.readyState === 1) c.send(data)

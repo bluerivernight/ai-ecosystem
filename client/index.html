@@ -52,7 +52,23 @@
     .task .st { font-weight: 600; }
     .st.done { color: #4ade80; } .st.active { color: #fbbf24; } .st.failed { color: #f87171; } .st.queued { color: #93c5fd; }
     #hint { color: #9ca3af; font-size: 12px; line-height: 1.5; }
-    #hint kbd { background: #2e3340; border-radius: 3px; padding: 1px 5px; font-size: 11px; }
+    #chat-log {
+      display: flex; flex-direction: column; gap: 4px;
+      max-height: 220px; overflow-y: auto; margin-bottom: 6px;
+    }
+    #chat-log .msg {
+      padding: 6px 8px; border-radius: 6px; font-size: 12px;
+      max-width: 92%; white-space: pre-wrap; word-break: break-word;
+    }
+    #chat-log .msg.user { background: #1d4ed8; color: #fff; align-self: flex-end; }
+    #chat-log .msg.boss { background: #4a3a10; color: #fde68a; align-self: flex-start; }
+    .pending { font-size: 11px; color: #9ca3af; min-height: 14px; margin: 2px 0 4px; }
+    #boss-row { display: flex; gap: 6px; }
+    #chat-input {
+      flex: 1; background: #12151b; color: #e5e7eb; border: 1px solid #3a404c;
+      border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 12px;
+    }
+    #chat-send { padding: 6px 10px; font-size: 12px; background: #f59e0b; color: #1f2937; font-weight: 600; }
     /* dialog */
     #dialog {
       position: fixed; inset: 0; background: rgba(0,0,0,0.55);
@@ -94,6 +110,15 @@
 
   <div id="side">
     <div class="panel">
+      <h3>👑 Message the Boss</h3>
+      <div id="chat-log"></div>
+      <div class="pending" id="chat-pending"></div>
+      <div id="boss-row">
+        <input id="chat-input" maxlength="500" placeholder="Ask the Boss anything… he can delegate" />
+        <button id="chat-send">Send</button>
+      </div>
+    </div>
+    <div class="panel">
       <h3>Tasks</h3>
       <div class="counts">
         <div><b id="c-queued">0</b><span>queued</span></div>
@@ -111,8 +136,9 @@
     </div>
     <div class="panel" id="hint">
       <h3>How to play</h3>
-      <kbd>W A S D</kbd> walk around<br>
-      Walk up to an agent and press <kbd>E</kbd> to give them a task<br>
+      This is a god-eye view: you see the whole office at once, no walking needed.<br>
+      Message the Boss above — he knows everything and delegates work to the agents.<br>
+      Or click an agent on the map to give them a task directly.<br>
       Agents think, work and chat on their own — tiny local AI
     </div>
   </div>

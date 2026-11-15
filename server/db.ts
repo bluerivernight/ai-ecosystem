@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'node:path'
 import { DATA_DIR } from './config.js'
-import type { TaskRow } from '../shared/types.js'
+import type { TaskRow, ChatRow } from '../shared/types.js'
 
 export interface AgentRow {
   id: number
@@ -45,6 +45,12 @@ export class Db {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         agent_id INTEGER NOT NULL,
         kind TEXT NOT NULL,
+        text TEXT NOT NULL,
+        ts INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS chats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        role TEXT NOT NULL,
         text TEXT NOT NULL,
         ts INTEGER NOT NULL
       );
@@ -136,9 +142,23 @@ export class Db {
     return rows.map(r => r.text)
   }
 
+  // ---- boss chat (human ↔ Boss conversation) ----
+  addChat(role: 'user' | 'boss', text: string): void {
+    this.db.prepare('INSERT INTO chats (role, text, ts) VALUES (?, ?, ?)').run(role, text.slice(0, 800), Date.now())
+    // rotate: keep the newest 500 rows
+    this.db
+      .prepare(`DELETE FROM chats WHERE id NOT IN (SELECT id FROM chats ORDER BY id DESC LIMIT 500)`)
+      .run()
+  }
+
+  recentChats(limit = 8): ChatRow[] {
+    return this.db
+      .prepare('SELECT id, role, text, ts FROM chats ORDER BY id DESC LIMIT ?')
+      .all(limit) as ChatRow[]
+  }
+
   // ---- events (rotated so the DB can't grow forever) ----
-  addEvent(text: string): void {
-    this.db.prepare('INSERT INTO events (ts, text) VALUES (?, ?)').run(Date.now(), text.slice(0, 300))
+  addEvent(text: string): void {    this.db.prepare('INSERT INTO events (ts, text) VALUES (?, ?)').run(Date.now(), text.slice(0, 300))
     // keep only the newest 2000 rows
     this.db
       .prepare(
