@@ -10,11 +10,11 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import express from 'express'
 import { WebSocketServer } from 'ws'
-import { loadConfig, ensureDirs, appRoot, WORKSPACE_DIR } from './config.js'
+import { loadConfig, ensureDirs, appRoot, WORKSPACE_DIR, DEFAULT_MODEL, saveModel } from './config.js'
 import * as logs from './logs.js'
 import { Updater } from './updater.js'
 import { Db } from './db.js'
-import { Llm } from './llm.js'
+import { Llm, pickChatModel } from './llm.js'
 import { buildTools } from './tools.js'
 import { SkillRegistry } from './skills.js'
 import { WorldSim } from './world.js'
@@ -136,6 +136,82 @@ app.get('/health', async (_req, res) => {
   })
 })
 
+// ---- model setup: auto-detect, verify, switch, install ----
+let pullState: { model: string; percent: number } | null = null
+
+app.get('/api/models', async (_req, res) => {
+  const ollamaOk = await llm.healthy()
+  const installed = ollamaOk ? await llm.listModels() : []
+  res.json({
+    ollama: ollamaOk,
+    current: cfg.model,
+    modelLoaded: ollamaOk ? await llm.hasModel(cfg.model) : false,
+    defaultModel: DEFAULT_MODEL,
+    installed,
+    pulling: pullState
+  })
+})
+
+// switch the office to an installed model — verified by EXACT name match first
+app.post('/api/model/use', express.json({ limit: '2kb' }), async (req, res) => {
+  const model = String((req.body as { model?: string } | undefined)?.model ?? '').trim()
+  if (!model) {
+    res.status(400).json({ error: 'model is required' })
+    return
+  }
+  if (!(await llm.hasModel(model))) {
+    res.status(404).json({ error: `"${model}" is not installed in Ollama (exact name required)` })
+    return
+  }
+  cfg.model = model
+  saveModel(model)
+  emitEvent(`Model switched to ${model}`)
+  res.json({ ok: true, model })
+})
+
+// install a model (default: qwen2.5:1.5b). Progress streams to the event log.
+app.post('/api/model/pull', express.json({ limit: '2kb' }), (req, res) => {
+  const model = String((req.body as { model?: string } | undefined)?.model ?? DEFAULT_MODEL).trim()
+  if (!model) {
+    res.status(400).json({ error: 'model is required' })
+    return
+  }
+  if (pullState) {
+    res.status(409).json({ error: 'a pull is already running', pulling: pullState })
+    return
+  }
+  res.json({ ok: true, model })
+  pullState = { model, percent: 0 }
+  emitEvent(`⬇ Installing AI model ${model} — this can take a while on slow internet`)
+  void (async () => {
+    try {
+      let lastPct = -5
+      await llm.pull(model, p => {
+        if (p.percent >= 0 && p.percent - lastPct >= 5) {
+          lastPct = p.percent
+          pullState = { model, percent: p.percent }
+          emitEvent(`⬇ ${model}: ${p.percent}%`)
+        }
+      })
+      pullState = null
+      if (await llm.hasModel(model)) {
+        emitEvent(`✅ AI model ${model} installed`)
+        if (cfg.model !== model) {
+          cfg.model = model
+          saveModel(model)
+          emitEvent(`Model switched to ${model}`)
+        }
+      } else {
+        emitEvent(`⚠ ${model} pull ended but is not visible in Ollama — check ollama list`)
+      }
+    } catch (e) {
+      pullState = null
+      const msg = e instanceof Error ? e.message : String(e)
+      emitEvent(`❌ Model install failed: ${msg}`)
+    }
+  })()
+})
+
 // full state dump for remote bug reports (report-log.bat uses this too)
 app.get('/api/diagnostics', async (_req, res) => {
   const ollamaOk = await llm.healthy()
@@ -224,14 +300,39 @@ server.listen(cfg.port, () => {
   console.log(`[boot] workspace: ${WORKSPACE_DIR}`)
 })
 
-// health checks on boot (non-fatal — the server still runs without Ollama)
+// one funnel for every event: DB + WS broadcast
+function emitEvent(text: string): void {
+  db.addEvent(text)
+  net.broadcastEvent({ type: 'event', text, ts: Date.now() })
+}
+
+// health checks + model auto-detect on boot (non-fatal — the server still runs
+// without Ollama; if the configured model is missing we switch to the best
+// installed chat model instead of demanding a slow pull on a weak laptop)
 void (async () => {
   const ok = await llm.healthy()
   if (!ok) {
     console.warn('[boot] Ollama not reachable — agents will idle until it starts. Run: ollama serve')
+    return
+  }
+  if (await llm.hasModel(cfg.model)) {
+    console.log(`[boot] model ready: ${cfg.model}`)
+    return
+  }
+  // auto-detect: the configured model isn't installed — use the best one that IS
+  const installed = await llm.listModels()
+  const pick = pickChatModel(installed)
+  if (pick) {
+    const old = cfg.model
+    cfg.model = pick.name
+    saveModel(pick.name)
+    console.log(`[boot] "${old}" is not installed — auto-switched to installed model: ${pick.name}`)
+    console.log('[boot] (change "model" in config.json to override, or click a model in the office page)')
+    emitEvent(`Model set up automatically: ${pick.name} (the default wasn't installed)`)
   } else {
-    const has = await llm.hasModel(cfg.model)
-    console.log(has ? `[boot] model ready: ${cfg.model}` : `[boot] model missing — run: ollama pull ${cfg.model}`)
+    console.warn(`[boot] no chat model installed — run: ollama pull ${cfg.model}`)
+    console.warn('[boot] or open the office page and click "Install default model"')
+    emitEvent('No AI model installed yet — open the office page and click "Install default model" (or run: ollama pull qwen2.5:1.5b-instruct-q4_K_M)')
   }
 })()
 

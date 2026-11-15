@@ -175,6 +175,92 @@ async function sendTask(): Promise<void> {
   }
 }
 
+// ---- model panel: auto-detect installed models, verify, switch or install ----
+const modelInfo = document.getElementById('model-info')!
+const modelList = document.getElementById('model-list')!
+const modelPull = document.getElementById('model-pull') as HTMLButtonElement
+const modelProgress = document.getElementById('model-progress')!
+
+interface ModelStatus {
+  ollama: boolean
+  current: string
+  modelLoaded: boolean
+  defaultModel: string
+  installed: Array<{ name: string; size: number }>
+  pulling: { model: string; percent: number } | null
+}
+
+function fmtSize(b: number): string {
+  return b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`
+}
+
+async function refreshModels(): Promise<void> {
+  let m: ModelStatus
+  try {
+    m = await (await fetch('/api/models')).json() as ModelStatus
+  } catch {
+    return
+  }
+  if (!m.ollama) {
+    modelInfo.textContent = '⚠ Ollama is not running. Start Ollama — it should auto-start.'
+    modelList.innerHTML = ''
+    modelPull.style.display = 'none'
+    modelProgress.textContent = ''
+    return
+  }
+  modelPull.style.display = ''
+  if (m.pulling) {
+    modelInfo.textContent = `⬇ Installing ${m.pulling.model}…`
+    modelProgress.textContent = m.pulling.percent >= 0 ? `${m.pulling.percent}%` : 'starting…'
+  } else {
+    modelProgress.textContent = ''
+    modelInfo.textContent = m.modelLoaded
+      ? `✅ ${m.current} — ready`
+      : `⚠ "${m.current}" is not installed. Pick one below or install the default.`
+  }
+  modelList.innerHTML = ''
+  for (const inst of m.installed) {
+    const b = document.createElement('button')
+    b.className = 'ghost model-btn'
+    b.textContent = inst.name === m.current
+      ? `✓ ${inst.name} (${fmtSize(inst.size)})`
+      : `${inst.name} (${fmtSize(inst.size)})`
+    if (inst.name === m.current) b.disabled = true
+    b.onclick = () => void useModel(inst.name)
+    modelList.appendChild(b)
+  }
+  modelPull.textContent = m.modelLoaded ? `Install ${m.defaultModel}` : `Install ${m.defaultModel} (default)`
+  modelPull.disabled = !!m.pulling
+}
+
+async function useModel(name: string): Promise<void> {
+  modelProgress.textContent = 'Switching…'
+  try {
+    const r = await fetch('/api/model/use', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: name })
+    })
+    const j = await r.json() as { ok?: boolean; error?: string }
+    modelProgress.textContent = j.ok ? `Using ${name}` : (j.error ?? 'Switch failed.')
+  } catch {
+    modelProgress.textContent = 'Server unreachable.'
+  }
+  void refreshModels()
+}
+
+modelPull.onclick = () => {
+  void fetch('/api/model/pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  })
+  void refreshModels()
+}
+
+setInterval(() => void refreshModels(), 5000)
+void refreshModels()
+
 // ---- loop ----
 net.connect()
 

@@ -41,6 +41,9 @@ HTTP routes the server answers:
 | `GET /api/tasks` / `POST /api/tasks` | list recent tasks / assign one `{ agentId, title, body }` (Boss id 5 rejected by the sim) |
 | `POST /api/boss` | `{ text }` → `{ ok: true }` immediately; the Boss's reply arrives over WS as `{ type: 'boss', text, ts }` and as a speech bubble in the office |
 | `GET /api/chats` | the human ↔ Boss chat history (`chats` table, rotated to newest 500 rows) |
+| `GET /api/models` | `{ ollama, current, modelLoaded, defaultModel, installed[{name,size}], pulling }` — everything the model panel needs |
+| `POST /api/model/use` | `{ model }` → switch the office to an INSTALLED model. Verified by exact name match first; 404 otherwise |
+| `POST /api/model/pull` | `{ model? }` (default: qwen2.5:1.5b) → installs via Ollama with progress ≥5% steps broadcast as events; one pull at a time (409 if busy); auto-switches `config.json` on success |
 | `GET /api/events` | recent event log |
 | `GET /api/diagnostics` | version, uptime, node version, platform, RSS memory, config, health, crash-file list, last 80 log lines — everything a bug report needs |
 | `GET /api/update` | current vs. latest version from the auto-updater |
@@ -62,7 +65,7 @@ Data layout (all under `data/`, all git-ignored):
 |---|---|
 | `server/main.ts` | entrypoint: express + WS + sim loop (4 Hz tick), routes, boot health check, crash handlers |
 | `server/config.ts` | loads `config.json` (writes defaults if missing). **GOTCHA: `ROOT` is computed as two `dirname` levels up from the compiled file** — compiled output lives at `dist-server/server/config.js`, so root is `import.meta.dirname/../../`. Getting this wrong silently makes `data/` appear inside `dist-server/` |
-| `server/llm.ts` | the ONE model slot: serialized chat queue, `format` = JSON schema, 120 s timeout, exact-match `hasModel` |
+| `server/llm.ts` | the ONE model slot: serialized chat queue, `format` = JSON schema, 120 s timeout, exact-match `hasModel`. Also `listModels` / `pull` (streamed progress) and `pickChatModel` (auto-detect scoring: known small chat families first, embedder/vision tags and anything over ~5 GB excluded) |
 | `server/agent.ts` | the task runner: builds the prompt, parses the forced-JSON tool call, runs tools in a loop, writes the result to the task row |
 | `server/boss.ts` | the Boss (agent id 5): builds an office-aware prompt (workers, tasks, events, chats, workspace listing), forces `{ reply, tasks[] }` JSON, delegates via `db.addTask` + `sim.assign` |
 | `server/tools.ts` | sandboxed tools (§0 rule 2). `FORBIDDEN_CHARS` regex + first-word whitelist for `run_shell` |
@@ -93,6 +96,8 @@ Data layout (all under `data/`, all git-ignored):
 There is no third model slot. `num_ctx` is 2048, `num_predict` 300, temperature 0.3 — sized so a 1.5B model with the full agent prompt stays fast on 8 GB. `keepAlive` 5m so the model stays warm between tasks.
 
 Rule from §0 applies: one model at a time. If the person's machine has 16+ GB and they WANT a bigger model, the only correct move is editing `"model"` in `config.json` to the exact tag after `ollama pull <tag>` — never running two.
+
+**Model setup without the terminal (v1.2.0):** on boot, if the configured model isn't installed, the server picks the best *already installed* chat model itself (`pickChatModel` in `llm.ts`: small known families first; embedder/vision tags and >5 GB excluded) and saves it to `config.json`. The browser's **AI model** panel (`/api/models` polled every 5 s) lists every installed model with its size, lets the human switch (`POST /api/model/use`, exact-match verified) or install the default (`POST /api/model/pull`, progress broadcast as ≥5% event steps, one pull at a time).
 
 ## 5. Setup, step by step
 
@@ -170,6 +175,9 @@ Expected within ~20–60 s: `GET /api/chats` contains the user line and the Boss
 | tasks stuck `queued` forever | (historical bug) server predates the `sim.assign()` fix in `main.ts` | update — current code assigns on `POST /api/tasks` |
 | `data/` appears inside `dist-server/` | (historical bug) `ROOT` computed wrongly in `config.ts` | update — current code resolves two levels up from the compiled file |
 | `NODE_MODULE_VERSION mismatch` or better-sqlite3 crash | native module built for another Node | `npm rebuild better-sqlite3` (or delete `node_modules`, `npm install` again) |
+| boot prints `"X" is not installed — auto-switched to installed model: Y` | the configured model isn't pulled but another chat model is | not a failure — the office now runs on Y. Set `"model"` in `config.json` to override |
+| boot prints `no chat model installed` | Ollama has zero usable chat models (only embedders/vision, or nothing) | open the office page → **AI model** panel → *Install default model* (progress shows as % events), or `ollama pull qwen2.5:1.5b-instruct-q4_K_M` |
+| model pull too slow / fails on weak internet | 1 GB download | same as above: use any already-installed model via the panel or `POST /api/model/use` — no internet needed |
 | npm refuses to run build scripts | npm's script-blocking prompt not answered | approve `better-sqlite3` and `esbuild`, reinstall |
 | first task takes 20+ s | normal — model cold-load | nothing; later tasks are faster |
 | everything died overnight | Windows slept the machine | §5.4 |
@@ -235,6 +243,7 @@ Run all of these after any change; all must pass before you claim done:
    - `curl http://localhost:8080/api/diagnostics` → has `version`, `recentLog` non-empty
    - `curl http://localhost:8080/api/update` → `current` matches `package.json`
 3. POST `/api/boss` (§5.5) → Boss reply lands in `/api/chats`, a delegation event appears, the delegated task reaches `done`, the result file exists in `data/workspace/`.
-4. Open `http://localhost:8080` in a browser → whole office visible (5 agents, Boss gold and bigger), Boss chat panel works, event log ticks, no console errors.
-5. `data/logs/server.log` contains your session's boot lines.
-6. `git status` shows no `data/`, `config.json`, `dist-*` or `node_modules` staged.
+4. `GET /api/models` → `ollama: true` and `installed` non-empty; `modelLoaded: true` for the current model.
+5. Open `http://localhost:8080` in a browser → whole office visible (5 agents, Boss gold and bigger), Boss chat panel works, AI model panel shows the ready model, event log ticks, no console errors.
+6. `data/logs/server.log` contains your session's boot lines.
+7. `git status` shows no `data/`, `config.json`, `dist-*` or `node_modules` staged.

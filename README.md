@@ -40,6 +40,14 @@ Built to run 24/7 on a weak laptop (like a Surface Pro 6 with 8 GB RAM).
 > 💡 This project also works with slightly bigger models if your PC can handle
 > them — see [Choosing a model](#choosing-a-model) at the bottom.
 
+> 💡 **Can't pull the model (slow or failing internet)?** The office can sort
+> it out itself: start it anyway (Steps 2–4) — it auto-detects any AI model
+> already on your PC and asks nothing from the internet. And there's an
+> **"AI model" panel** in the office page: it lists every model Ollama has,
+> you click one to use it, or click **Install default model** and watch the
+> % progress live in the panel. If Ollama has *any* chat model installed
+> (even a different one), the office just uses it.
+
 ### Step 2 — Build the world
 
 1. Open a Command Prompt **in this folder** (easiest: click the folder's address
@@ -176,7 +184,8 @@ swap itself to death.
 | Problem | Fix |
 |---|---|
 | Browser shows nothing / port in use | Another app has port 8080. Change `"port"` in `config.json` |
-| Agents never do tasks | Open `http://localhost:8080/health`. If `ollama: false` → start Ollama. If `modelLoaded: false` → run the `ollama pull` command from Step 1 |
+| Model pull too slow or keeps failing | Don't pull — open the office page and use the **AI model panel**: pick any model already installed, or click **Install default model** and watch the % live. On next boot the office also auto-detects installed models by itself |
+| Agents never do tasks | Open `http://localhost:8080/health`. If `ollama: false` → start Ollama. If `modelLoaded: false` → use the AI model panel (or run the `ollama pull` command from Step 1) |
 | "Windows protected your PC" when double-clicking a .bat | Click **More info → Run anyway** (it's your own script, no internet code) |
 | First task takes 20+ seconds | Normal — the AI model loads into memory on first use. Later tasks are faster |
 | Build fails with red text | Run `npm install` first, then `npm run build` again |

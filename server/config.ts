@@ -25,6 +25,8 @@ export const SKILLS_DIR = path.join(ROOT, 'skills')
 
 export const appRoot = ROOT
 
+export const DEFAULT_MODEL = 'qwen2.5:1.5b-instruct-q4_K_M'
+
 export function loadConfig(): AppConfig {
   const file = path.join(ROOT, 'config.json')
   let user: Partial<AppConfig> = {}
@@ -44,7 +46,7 @@ function defaults(): AppConfig {
   return {
     port: 8080,
     ollamaUrl: 'http://localhost:11434',
-    model: 'qwen2.5:1.5b-instruct-q4_K_M',
+    model: DEFAULT_MODEL,
     bigModel: 'qwen2.5:3b-instruct-q4_K_M',
     maxAgents: 5,
     stepCap: 12,
@@ -62,5 +64,20 @@ function defaults(): AppConfig {
 export function ensureDirs(): void {
   for (const d of [DATA_DIR, WORKSPACE_DIR]) {
     if (!existsSync(d)) mkdirSync(d, { recursive: true })
+  }
+}
+
+/** Persist a model choice into config.json (the machine's file — never committed). */
+export function saveModel(model: string): void {
+  const file = path.join(ROOT, 'config.json')
+  let user: Partial<AppConfig> = {}
+  try {
+    user = JSON.parse(readFileSync(file, 'utf8')) as Partial<AppConfig>
+  } catch { /* keep defaults under it */ }
+  user.model = model
+  try {
+    writeFileSync(file, JSON.stringify({ ...defaults(), ...user }, null, 2))
+  } catch (e) {
+    console.error('[config] could not save model choice:', e instanceof Error ? e.message : e)
   }
 }

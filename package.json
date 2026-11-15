@@ -1,6 +1,6 @@
 {
   "name": "ai-ecosystem",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Sims-style god-eye 2D pixel-office AI agent world. Talk to the Boss, he runs the office. 100% local, runs on 8 GB RAM, 24/7 capable.",
   "type": "module",
   "engines": {
@@ -15,7 +15,7 @@
     "dev:client": "vite"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^13.2.0",
     "express": "^4.21.2",
     "ws": "^8.18.0"
   },
@@ -28,7 +28,7 @@
     "vite": "^7.0.0"
   },
   "allowScripts": {
-    "better-sqlite3@11.10.0": true,
+    "better-sqlite3@13.2.0": true,
     "esbuild@0.28.2": true
   }
 }

@@ -69,6 +69,12 @@
       border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 12px;
     }
     #chat-send { padding: 6px 10px; font-size: 12px; background: #f59e0b; color: #1f2937; font-weight: 600; }
+    .model-line { font-size: 12px; color: #c7ccd6; margin-bottom: 6px; line-height: 1.4; }
+    #model-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+    .model-btn { text-align: left; font-size: 12px; padding: 5px 8px; }
+    .model-btn:disabled { opacity: 0.7; cursor: default; }
+    #model-pull { width: 100%; font-size: 12px; padding: 6px; }
+    #model-progress { font-size: 11px; color: #fbbf24; min-height: 14px; }
     /* dialog */
     #dialog {
       position: fixed; inset: 0; background: rgba(0,0,0,0.55);
@@ -117,6 +123,13 @@
         <input id="chat-input" maxlength="500" placeholder="Ask the Boss anything… he can delegate" />
         <button id="chat-send">Send</button>
       </div>
+    </div>
+    <div class="panel" id="model-panel">
+      <h3>AI model</h3>
+      <div class="model-line" id="model-info">checking…</div>
+      <div id="model-list"></div>
+      <button id="model-pull" class="ghost">Install default model</button>
+      <div id="model-progress"></div>
     </div>
     <div class="panel">
       <h3>Tasks</h3>
